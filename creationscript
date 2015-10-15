@@ -27,6 +27,14 @@ $cbooks = cBibleBook::getObjects();
                     list($bcode, $chapter, $vnum) = explode('.', $attr->value);
                     $adding = true;
                 }
+                if ($a->nodeName === 'f') {
+                    continue;
+                }
+                if ($a->nodeName === 'ft') {
+                    // Skip this node and the text node that follows
+                    $r->read();
+                    continue;
+                }
                 if ($adding && ($a->nodeType === XML_TEXT_NODE || in_array($a->nodeName, array('w', 'add'))) && $a->nodeValue) {
                     $attr = $a->attributes ? $a->attributes->getNamedItem('s') : null;
                     $nodeval = str_replace("\n", '', $a->nodeValue);
@@ -74,16 +82,10 @@ $cbooks = cBibleBook::getObjects();
                             array('.', ',', ':', 'the LORD', ';'), implode(' ', $verse))));
                     $adding = false;
                     $verse = array();
-//                    if ($bcode === 'GEN' && $chapter == 2 && $vnum == 8) {
+//                    if ($bcode === 'GEN' && $chapter == 1 && $vnum == 5) {
 //                        var_dump($bible);
 //                        exit;
 //                    }
-                }
-                if ($a->nodeName === 'f') {
-                    $adding = false;
-                }
-                if ($a->nodeName === 'ft') {
-                    $adding = true;
                 }
                 if ($a->nodeName === 'wj') {
                     if ($redletter) {
@@ -97,7 +99,7 @@ $cbooks = cBibleBook::getObjects();
                     }
                 }
             }
-//            file_put_contents('temp/kjva.json', json_encode($bible));
+            file_put_contents('temp/kjva.json', json_encode($bible));
             foreach ($bible as $code => $chapters) {
                 foreach ($chapters as $cnum => $vs) {
                     foreach ($vs['verses'] as $vn => $text) {
@@ -109,4 +111,3 @@ SQL;
                     }
                 }
             }
-            exit;
