@@ -1,0 +1,112 @@
+<?php
+$cbooks = cBibleBook::getObjects();
+            $bycode = array();
+            foreach ($cbooks as $x) {
+                $bycode[$x->code] = $x->id;
+            }
+            $r = new XMLReader;
+            $r->open("temp/eng-kjv_usfx.xml");
+            $bible = array();
+            $verse = array();
+            $versered = array();
+            $bcode = $chapter = $vnum = null;
+            $adding = false;
+            $nn = array();
+            $redletter = false;
+            while ($r->read()) {
+                $a = $r->expand();
+//                if (!in_array($a->nodeName, $nn)) {
+//                    $nn[] = $a->nodeName;
+//                }
+//                continue;
+                if (in_array($a->nodeName, array('b'))) {
+                    continue;
+                }
+                if ($a->nodeName === 'v') {
+                    $attr = $a->attributes->getNamedItem('bcv');
+                    list($bcode, $chapter, $vnum) = explode('.', $attr->value);
+                    $adding = true;
+                }
+                if ($adding && ($a->nodeType === XML_TEXT_NODE || in_array($a->nodeName, array('w', 'add'))) && $a->nodeValue) {
+                    $attr = $a->attributes ? $a->attributes->getNamedItem('s') : null;
+                    $nodeval = str_replace("\n", '', $a->nodeValue);
+                    if ($attr) {
+                        $val = "<span data-strongs='{$attr->value}' class='strongs'>{$nodeval}</span>";
+                        $r->read();
+                        $a = $r->expand();
+                    } else if ($a->nodeName === 'add') {
+                        $val = "<em additional='1'>{$nodeval}</em>";
+                        $r->read();
+                        $a = $r->expand();
+                    } else {
+                        $val = $nodeval;
+                    }
+                    if ($redletter) {
+                        $versered[] = $val;
+                    } else {
+                        $verse[] = $val;
+                    }
+                }
+                if ($a->nodeName === 'd') {
+                    foreach ($a->childNodes as $node) {
+                        $attr = $node->attributes ? $node->attributes->getNamedItem('s') : null;
+                        $nodeval = str_replace("\n", '', $node->nodeValue);
+                        if ($attr) {
+                            $val = "<span data-strongs='{$attr->value}' class='strongs'>{$nodeval}</span>";
+                            $r->read();
+                            $node = $r->expand();
+                        } else if ($node->nodeName === 'add') {
+                            $val = "<em additional='1'>{$nodeval}</em>";
+                            $r->read();
+                            $node = $r->expand();
+                        } else {
+                            $val = $nodeval;
+                        }
+                        $verse[] = $val;
+                    }
+                    $bible[$bcode][$chapter]['description'] = trim(str_replace(array(' .', ' ,', ' :','theLORD', ' ;'), 
+                            array('.', ',', ':', 'the LORD', ';'), implode(' ', $verse)));
+                    $verse = array();
+                }
+                if ($a->nodeName === 've') {
+                    // The end of the verse
+                    $bible[$bcode][$chapter]['verses'][$vnum] = preg_replace("/\s+/", ' ', trim(str_replace(array(' .', ' ,', ' :','theLORD', ' ;'), 
+                            array('.', ',', ':', 'the LORD', ';'), implode(' ', $verse))));
+                    $adding = false;
+                    $verse = array();
+//                    if ($bcode === 'GEN' && $chapter == 2 && $vnum == 8) {
+//                        var_dump($bible);
+//                        exit;
+//                    }
+                }
+                if ($a->nodeName === 'f') {
+                    $adding = false;
+                }
+                if ($a->nodeName === 'ft') {
+                    $adding = true;
+                }
+                if ($a->nodeName === 'wj') {
+                    if ($redletter) {
+                        // Currently processing a redletter verse
+                        $verse[] = "<span class='verse-red'>" . trim(str_replace(array(' .', ' ,', ' :','theLORD', ' ;'), array('.', ',', ':', 'the LORD', ';'), 
+                                implode(' ', $versered))) . "</span>";
+                        $versered = array();
+                        $redletter = false;
+                    } else {
+                        $redletter = true;
+                    }
+                }
+            }
+//            file_put_contents('temp/kjva.json', json_encode($bible));
+            foreach ($bible as $code => $chapters) {
+                foreach ($chapters as $cnum => $vs) {
+                    foreach ($vs['verses'] as $vn => $text) {
+                        $fkbook = $bycode[$code];
+                        $sql = <<<SQL
+INSERT INTO tbibleverse (datecreated, datemodified, fkbook, chapter, verse, text, strippedtext) VALUES(now(),now(),?,?,?,?,?)
+SQL;
+                        cDB::insert($sql, array($fkbook, $cnum, $vn, $text, strip_tags($text)));
+                    }
+                }
+            }
+            exit;
